@@ -100,22 +100,6 @@ git clone https://github.com/ThedDryz/comfyui-batch-builder.git
 
 Restart ComfyUI. No extra Python dependencies.
 
-### Modal
-
-Add the clone to the image build in your Modal script. Use the same `custom_nodes` path the script already installs into:
-
-```python
-image = (
-    image
-    .run_commands(
-        "cd /root/comfy/ComfyUI/custom_nodes"
-        " && git clone https://github.com/ThedDryz/comfyui-batch-builder.git"
-    )
-)
-```
-
-To pick up new commits, rebuild the image. Modal caches image layers, so change the command (for example add `&& git -C comfyui-batch-builder checkout <commit>`) or use `force_build=True` on that step.
-
 ## Tests
 
 ```bash
