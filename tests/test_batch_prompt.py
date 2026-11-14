@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -154,6 +155,59 @@ class IndexTest(unittest.TestCase):
         self.assertFalse(r.advance)
 
 
+class SizeTest(unittest.TestCase):
+    def test_picks_size_for_line(self):
+        r = build_batch(2, 0, 1, booru="a\nb\nc", width="1216\n1024\n832", height="832\n1024\n1216", seeds=SEEDS)
+        self.assertEqual((r.width, r.height), (1024, 1024))
+        self.assertIn("1024x1024", r.status)
+        self.assertEqual(r.warnings, [])
+
+    def test_short_list_reuses_last_and_warns(self):
+        r = build_batch(3, 0, 1, booru="a\nb\nc", width="1216\n832", height="1024", seeds=SEEDS)
+        self.assertEqual((r.width, r.height), (832, 1024))
+        self.assertTrue(any("width has 2 lines" in w for w in r.warnings))
+        self.assertTrue(any("height has 1 lines" in w for w in r.warnings))
+
+    def test_empty_lists_default(self):
+        r = build_batch(1, 0, 1, booru="a", seeds=SEEDS)
+        self.assertEqual((r.width, r.height), (1024, 1024))
+
+    def test_bad_line_warns_and_defaults(self):
+        r = build_batch(1, 0, 1, booru="a\nb", width="wide\n832", height="-5\n832", seeds=SEEDS)
+        self.assertEqual((r.width, r.height), (1024, 1024))
+        self.assertTrue(any("width on line 1 is not a positive integer" in w for w in r.warnings))
+        self.assertTrue(any("height on line 1 is not a positive integer" in w for w in r.warnings))
+
+    def test_snaps_to_multiple_of_8(self):
+        r = build_batch(1, 0, 1, booru="a", width="1210", height="20", seeds=SEEDS)
+        self.assertEqual((r.width, r.height), (1208, 64))
+        self.assertIn("width 1210 on line 1 rounded to 1208 (multiple of 8)", r.warnings)
+
+    def test_node_returns_latent_slot(self):
+        self.assertEqual(BatchPromptBuilder.RETURN_TYPES[-1], "LATENT")
+        self.assertFalse(BatchPromptBuilder.OUTPUT_IS_LIST[-1])
+        optional = BatchPromptBuilder.INPUT_TYPES()["optional"]
+        self.assertEqual(optional["width"][1]["group"], optional["height"][1]["group"])
+
+
+class PlaceholderTest(unittest.TestCase):
+    def test_placeholders_name_the_type(self):
+        spec = BatchPromptBuilder.INPUT_TYPES()
+        fields = {**spec["required"], **spec["optional"]}
+        placeholders = {k: v[1].get("placeholder") for k, v in fields.items() if v[0] == "ROLL_TEXT"}
+        self.assertEqual(placeholders, {
+            "prepend": "text",
+            "append": "text",
+            "booru": "multiline text",
+            "natural": "multiline text",
+            "character_booleans": "multiline text",
+            "width": "multiline int",
+            "height": "multiline int",
+        })
+        char = CharacterDefinition.INPUT_TYPES()["required"]
+        self.assertTrue(all(v[1]["placeholder"] == "text" for v in char.values() if v[0] == "ROLL_TEXT"))
+
+
 class WildcardTest(unittest.TestCase):
     def test_same_seed_same_result(self):
         text = "{a|b|c} {d|e|f} {g|h}"
@@ -209,21 +263,41 @@ class SeedListTest(unittest.TestCase):
         self.assertEqual(make_seeds(9, 2, "increment", 0, 9), [9, 0])
 
     def test_node_outputs(self):
-        seeds, preview, total = SeedList().generate(0, 100, "increment", 3, 5)
+        out = SeedList().generate(0, 100, "increment", 3, 5)
+        seeds, preview, total = out["result"]
         self.assertEqual(seeds, [5, 6, 7])
         self.assertEqual(preview, "5, 6, 7")
         self.assertEqual(total, 3)
+        self.assertEqual(out["ui"]["bp_master_seed"], [5])
         self.assertEqual(SeedList.OUTPUT_IS_LIST, (True, False, False))
+
+    def test_randomize_seed_is_resolved(self):
+        out = SeedList().generate(0, 1125899906842624, "increment", 2, -1)
+        master = out["ui"]["bp_master_seed"][0]
+        self.assertTrue(0 <= master <= 1125899906842624)
+        self.assertEqual(out["result"][0], [master, master + 1])
+
+    def test_randomize_seed_always_reruns(self):
+        changed = SeedList.IS_CHANGED(seed=-1)
+        self.assertNotEqual(changed, changed)
+        self.assertEqual(SeedList.IS_CHANGED(seed=7), 7)
+
+    def test_no_after_generate_control(self):
+        seed_spec = SeedList.INPUT_TYPES()["required"]["seed"][1]
+        self.assertFalse(seed_spec["control_after_generate"])
+        self.assertEqual(seed_spec["default"], -1)
 
 
 class NodeWrapperTest(unittest.TestCase):
     def test_unwraps_list_inputs(self):
-        out = BatchPromptBuilder().build(
-            seeds=SEEDS, start_index=[1], end_index=[0], batch=[3], auto_advance=[True],
-            prepend=["s"], append=[""], booru=["a\nb"], natural=[""], character_booleans=[""],
-            character=[character()],
-        )
-        prompts, seeds, template, status = out["result"]
+        with mock.patch("nodes.batch_prompt_builder.empty_latent", side_effect=lambda w, h: (w, h)):
+            out = BatchPromptBuilder().build(
+                seeds=SEEDS, start_index=[1], end_index=[0], batch=[3], auto_advance=[True],
+                prepend=["s"], append=[""], booru=["a\nb"], natural=[""], character_booleans=[""],
+                character=[character()], width=["832\n1216"], height=["1216\n832"],
+            )
+        prompts, seeds, template, status, latent = out["result"]
+        self.assertEqual(latent, (832, 1216))
         self.assertEqual(len(prompts), 3)
         self.assertEqual(seeds, SEEDS[:3])
         self.assertTrue(template.startswith("s a 1girl"))

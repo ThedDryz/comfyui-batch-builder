@@ -2,6 +2,9 @@ import json
 
 CATEGORY = "prompt/batch"
 
+# Multiline text drawn by js/roll_field.js: labeled, roll/unroll, independently resizable.
+ROLL_TEXT = "ROLL_TEXT"
+
 # (key, label, drop keyword). Base has no drop keyword.
 PARTS = (
     ("base", "Base", None),
@@ -15,6 +18,24 @@ PARTS = (
     ("legs", "Legs", "nolegs"),
     ("feet", "Feet", "nofeet"),
 )
+
+# Placeholders name the data type; the label names the field.
+TEXT = "text"
+MULTILINE_TEXT = "multiline text"
+MULTILINE_INT = "multiline int"
+
+HINTS = {
+    "base": "1girl, character name, series, skin tone, body type",
+    "hair": "hair color and style",
+    "head": "hat, cap, ahoge",
+    "eyes": "eye color and shape",
+    "face": "mask, mole, freckles",
+    "chest": "breast shape",
+    "top": "top clothes and style",
+    "bottom": "bottom clothes and style",
+    "legs": "legs shape, legwear",
+    "feet": "shoes, feet details",
+}
 
 DROP_KEYWORDS = {keyword: key for key, _, keyword in PARTS if keyword}
 
@@ -56,11 +77,20 @@ class CharacterDefinition:
     def INPUT_TYPES(cls):
         required = {}
         for key, label, keyword in PARTS:
-            required[key] = ("STRING", {"multiline": True, "default": "", "dynamicPrompts": False})
-            tooltip = f"Include {label}." + (f" A line containing '{keyword}' drops it." if keyword else "")
+            tooltip = f"{label}: {HINTS[key]}." + (f" A keyword line containing '{keyword}' drops it." if keyword else "")
+            required[key] = (
+                ROLL_TEXT,
+                {
+                    "default": "",
+                    "title": label,
+                    "placeholder": TEXT,
+                    "toggle": f"{key}_enabled",
+                    "tooltip": tooltip,
+                },
+            )
             required[f"{key}_enabled"] = (
                 "BOOLEAN",
-                {"default": True, "label_on": "on", "label_off": "off", "tooltip": tooltip},
+                {"default": True, "label_on": "on", "label_off": "off", "tooltip": f"Include {label}."},
             )
         return {"required": required}
 

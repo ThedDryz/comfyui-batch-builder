@@ -3,10 +3,12 @@ import random
 CATEGORY = "prompt/batch"
 
 MAX_SEED = 0xFFFFFFFFFFFFFFFF
+RANDOM_MAX = 1125899906842624
+RANDOMIZE = -1
 METHODS = ("random", "increment", "decrement")
 
 
-def make_seeds(seed, total, method="random", min_num=0, max_num=1125899906842624):
+def make_seeds(seed, total, method="random", min_num=0, max_num=RANDOM_MAX):
     if max_num < min_num:
         min_num, max_num = max_num, min_num
     if method == "random":
@@ -18,6 +20,12 @@ def make_seeds(seed, total, method="random", min_num=0, max_num=1125899906842624
     return [min_num + (seed - min_num + step * i) % span for i in range(total)]
 
 
+def resolve_master_seed(seed):
+    if seed < 0:
+        return random.SystemRandom().randint(0, RANDOM_MAX)
+    return seed
+
+
 class SeedList:
     CATEGORY = CATEGORY
     RETURN_TYPES = ("INT", "STRING", "INT")
@@ -26,7 +34,8 @@ class SeedList:
     FUNCTION = "generate"
     DESCRIPTION = (
         "Generates `total` seeds from one master seed. `seeds` is a list, so every node it feeds "
-        "runs once per seed (one image per seed)."
+        "runs once per seed (one image per seed). Seed -1 picks a new master seed when the prompt "
+        "is queued; the button recalls the last four."
     )
 
     @classmethod
@@ -34,13 +43,30 @@ class SeedList:
         return {
             "required": {
                 "min_num": ("INT", {"default": 0, "min": 0, "max": MAX_SEED}),
-                "max_num": ("INT", {"default": 1125899906842624, "min": 0, "max": MAX_SEED}),
+                "max_num": ("INT", {"default": RANDOM_MAX, "min": 0, "max": MAX_SEED}),
                 "method": (list(METHODS), {"default": "random"}),
                 "total": ("INT", {"default": 4, "min": 1, "max": 1024}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": MAX_SEED, "control_after_generate": True}),
+                "seed": (
+                    "INT",
+                    {
+                        "default": RANDOMIZE,
+                        "min": RANDOMIZE,
+                        "max": MAX_SEED,
+                        "control_after_generate": False,
+                        "tooltip": "Master seed. -1 = new random seed each queue.",
+                    },
+                ),
             }
         }
 
+    @classmethod
+    def IS_CHANGED(cls, seed, **kwargs):
+        return float("nan") if seed < 0 else seed
+
     def generate(self, min_num, max_num, method, total, seed):
-        seeds = make_seeds(seed, total, method, min_num, max_num)
-        return (seeds, ", ".join(str(s) for s in seeds), len(seeds))
+        master = resolve_master_seed(seed)
+        seeds = make_seeds(master, total, method, min_num, max_num)
+        return {
+            "ui": {"bp_master_seed": [master]},
+            "result": (seeds, ", ".join(str(s) for s in seeds), len(seeds)),
+        }
