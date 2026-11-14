@@ -89,6 +89,7 @@ Outputs:
 - **Seeds**: the seeds actually used (list).
 - **Template**: the line before wildcard resolution.
 - **Status**: current line, variant count, latent size, dropped parts and warnings. Connect a text display node to watch progress.
+- **Batch**: the number of images for this line (a single integer). Connect it to a second Seed List's **Total** so a hires pass makes the same number of seeds.
 - **Latent**: an empty latent (batch size 1) at the line's width and height. Connect it to KSampler `latent_image` in place of Empty Latent Image.
 
 ## Wiring
@@ -105,7 +106,7 @@ flowchart LR
 ```
 
 - Connect KSampler and the negative wildcard processor to the **builder's** **Seeds** output, not to the Seed List directly. That keeps prompt i, negative i and sampler seed i aligned, and stops the run cleanly after the last line.
-- If a hires pass uses its own seeds, give it a second Seed List with the same **Total**.
+- If a hires pass uses its own seeds, give it a second Seed List and connect the builder's **Batch** output to its **Total**, so both passes always have the same number of seeds.
 - Queue with **batch count 1**. The browser extension queues each next line itself.
 
 Auto-advance runs in the ComfyUI browser tab: it listens for the finished run, sets **Start index** to the next line and queues again. It stops at **End index**, at the end of the lists, on an error, or when you cancel. Prompts queued only through the API do not advance.

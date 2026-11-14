@@ -226,9 +226,9 @@ def _first(value, default=None):
 
 class BatchPromptBuilder:
     CATEGORY = CATEGORY
-    RETURN_TYPES = ("STRING", "INT", "STRING", "STRING", "LATENT")
-    RETURN_NAMES = ("prompts", "seeds", "template", "status", "latent")
-    OUTPUT_IS_LIST = (True, True, False, False, False)
+    RETURN_TYPES = ("STRING", "INT", "STRING", "STRING", "INT", "LATENT")
+    RETURN_NAMES = ("prompts", "seeds", "template", "status", "batch", "latent")
+    OUTPUT_IS_LIST = (True, True, False, False, False, False)
     INPUT_IS_LIST = True
     OUTPUT_NODE = True
     FUNCTION = "build"
@@ -324,12 +324,12 @@ class BatchPromptBuilder:
         for warning in result.warnings:
             log.warning("[Batch Prompt Builder] %s", warning)
 
-        prompts, out_seeds = result.prompts, result.seeds
+        prompts, out_seeds, count = result.prompts, result.seeds, len(result.seeds)
         if result.done:
             log.info("[Batch Prompt Builder] %s", result.status)
-            latent = None
+            latent = count = None
             if ExecutionBlocker is not None:
-                latent = ExecutionBlocker(None)
+                latent = count = ExecutionBlocker(None)
                 prompts, out_seeds = [latent], [latent]
         else:
             latent = empty_latent(result.width, result.height)
@@ -340,5 +340,5 @@ class BatchPromptBuilder:
                 "bp_next_index": [result.next_index],
                 "bp_status": [result.status],
             },
-            "result": (prompts, out_seeds, result.template, result.status, latent),
+            "result": (prompts, out_seeds, result.template, result.status, count, latent),
         }

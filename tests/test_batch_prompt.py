@@ -207,8 +207,13 @@ class SizeTest(unittest.TestCase):
         self.assertIn("width 1210 on line 1 rounded to 1208 (multiple of 8)", r.warnings)
 
     def test_node_returns_latent_slot(self):
-        self.assertEqual(BatchPromptBuilder.RETURN_TYPES[-1], "LATENT")
-        self.assertFalse(BatchPromptBuilder.OUTPUT_IS_LIST[-1])
+        slot = BatchPromptBuilder.RETURN_NAMES.index("latent")
+        self.assertEqual(BatchPromptBuilder.RETURN_TYPES[slot], "LATENT")
+        self.assertFalse(BatchPromptBuilder.OUTPUT_IS_LIST[slot])
+        batch_slot = BatchPromptBuilder.RETURN_NAMES.index("batch")
+        self.assertEqual(batch_slot, slot - 1)
+        self.assertEqual(BatchPromptBuilder.RETURN_TYPES[batch_slot], "INT")
+        self.assertFalse(BatchPromptBuilder.OUTPUT_IS_LIST[batch_slot])
         optional = BatchPromptBuilder.INPUT_TYPES()["optional"]
         self.assertEqual(optional["width"][1]["group"], optional["height"][1]["group"])
 
@@ -326,8 +331,9 @@ class NodeWrapperTest(unittest.TestCase):
                 prepend=["s"], append=[""], booru=["a\nb"], natural=[""], character_booleans=[""],
                 character=[character()], width=["832\n1216"], height=["1216\n832"],
             )
-        prompts, seeds, template, status, latent = out["result"]
+        prompts, seeds, template, status, count, latent = out["result"]
         self.assertEqual(latent, (832, 1216))
+        self.assertEqual(count, 3)
         self.assertEqual(len(prompts), 3)
         self.assertEqual(seeds, SEEDS[:3])
         self.assertTrue(template.startswith("s a 1girl"))
