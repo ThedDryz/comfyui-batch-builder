@@ -69,6 +69,7 @@ The grey placeholder names the data type: `text` is one block of text, `multilin
 | `natural` | One natural-language line per prompt. |
 | `character_booleans` | One keyword line per prompt, for example `nohead, noeyes, nobottom`. |
 | Latent size `W` / `H` | One width and one height per prompt line, side by side under one header. |
+| `vary_wildcards` | Off by default. When on, a seed that repeats in the batch gets a new wildcard roll each time (see Wildcards). |
 
 Each prompt is `prepend`, the booru line, the natural line, the character, and `append`, joined with spaces.
 
@@ -79,6 +80,8 @@ Each prompt is `prepend`, the booru line, the natural line, the character, and `
 **Latent size.** Each prompt line gets its own width and height, read from the same line number as the prompt. All `batch` images of that line share the size. A list shorter than the prompts reuses its last value; an empty list or a line that is not a positive integer uses 1024. Values that are not multiples of 8 are rounded down to one (minimum 64). Each of these cases shows a warning in `status`.
 
 **Wildcards.** `{red hair|blonde hair|{short|long} black hair}` is resolved once per seed, so the same seed always gives the same prompt and matches the KSampler seed. Use `\{`, `\}` and `\|` for literal characters. Impact `__file__` wildcards are not supported.
+
+To test wildcard variations on a single sampler seed, set Seed List `total` to 1, `batch` to 4 and turn on `vary_wildcards`. KSampler gets the same seed four times; the first prompt is the one that seed always gives, and the other three use different, repeatable wildcard rolls. Distinct seeds are unaffected. Wildcards resolved by other nodes from the `seeds` output (such as a negative wildcard processor) still see only the sampler seed and do not vary.
 
 Outputs:
 

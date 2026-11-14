@@ -7,7 +7,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nodes import wildcard
-from nodes.batch_prompt_builder import BatchPromptBuilder, build_batch
+from nodes.batch_prompt_builder import BatchPromptBuilder, _roll_seed, build_batch
 from nodes.character_definition import CharacterDefinition
 from nodes.seed_list import SeedList, make_seeds
 
@@ -124,6 +124,27 @@ class SeedTest(unittest.TestCase):
         self.assertEqual(r.seeds, [11, 22, 33, 44, 11, 22])
         self.assertEqual(r.prompts[4], r.prompts[0])
         self.assertTrue(any("only 4 seed(s) are connected; seeds are cycled" in w for w in r.warnings))
+
+    def test_vary_wildcards_rolls_repeated_seed(self):
+        text = "{a|b|c|d|e|f|g|h} {i|j|k|l|m|n|o|p}"
+        r = build_batch(1, 0, 4, natural=text, seeds=[7], vary_wildcards=True)
+        self.assertEqual(r.seeds, [7, 7, 7, 7])
+        self.assertEqual(r.prompts, [wildcard.resolve(text, _roll_seed(7, n)) for n in range(4)])
+        self.assertEqual(r.prompts[0], wildcard.resolve(text, 7))
+        self.assertGreater(len(set(r.prompts)), 1)
+        again = build_batch(1, 0, 4, natural=text, seeds=[7], vary_wildcards=True)
+        self.assertEqual(again.prompts, r.prompts)
+
+    def test_vary_wildcards_keeps_distinct_seeds(self):
+        text = "{red|blue|green} hair"
+        on = build_batch(1, 0, 4, natural=text, seeds=SEEDS, vary_wildcards=True)
+        off = build_batch(1, 0, 4, natural=text, seeds=SEEDS)
+        self.assertEqual(on.prompts, off.prompts)
+
+    def test_roll_seed_never_returns_seed(self):
+        for seed in (0, 1, 7, 2**64 - 1):
+            for n in range(1, 50):
+                self.assertNotEqual(_roll_seed(seed, n), seed)
 
     def test_no_seeds_raises(self):
         with self.assertRaises(ValueError):

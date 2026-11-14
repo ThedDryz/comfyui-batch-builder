@@ -23,8 +23,17 @@ CATEGORY = "prompt/batch"
 MAX_INDEX = 100000
 DEFAULT_SIZE = 1024
 MIN_SIZE = 64
+# Odd, so every nonzero occurrence gives a nonzero mask and a roll different from the seed.
+_VARIANT_STEP = 0x9E3779B97F4A7C15
 
 log = logging.getLogger("BatchPrompt")
+
+
+def _roll_seed(seed, occurrence):
+    """Wildcard seed for the `occurrence`-th reuse of `seed` in one batch; 0 keeps the seed itself."""
+    if occurrence == 0:
+        return seed
+    return (int(seed) ^ (occurrence * _VARIANT_STEP)) & 0xFFFFFFFFFFFFFFFF
 
 
 def split_lines(text):
@@ -119,6 +128,7 @@ def build_batch(
     auto_advance=True,
     width="",
     height="",
+    vary_wildcards=False,
 ):
     booru_lines = split_lines(booru)
     natural_lines = split_lines(natural)
@@ -193,7 +203,14 @@ def build_batch(
     if len(seeds) < batch:
         warnings.append(f"batch is {batch} but only {len(seeds)} seed(s) are connected; seeds are cycled")
     result.seeds = [seeds[i % len(seeds)] for i in range(batch)]
-    result.prompts = [template.resolve(s).strip() for s in result.seeds]
+    roll_seeds = result.seeds
+    if vary_wildcards:
+        seen = {}
+        roll_seeds = []
+        for s in result.seeds:
+            roll_seeds.append(_roll_seed(s, seen.get(s, 0)))
+            seen[s] = seen.get(s, 0) + 1
+    result.prompts = [template.resolve(s).strip() for s in roll_seeds]
 
     if auto_advance and line < last_line:
         result.advance = True
@@ -275,11 +292,19 @@ class BatchPromptBuilder:
                     group="latent_size",
                     group_title="Latent size",
                 ),
+                "vary_wildcards": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Roll new wildcards each time a seed repeats in the batch. "
+                        "KSampler still gets the repeated seed.",
+                    },
+                ),
             },
         }
 
     def build(self, seeds, start_index, end_index, batch, auto_advance, prepend, append, booru, natural,
-              character_booleans, character=None, width=None, height=None):
+              character_booleans, character=None, width=None, height=None, vary_wildcards=None):
         result = build_batch(
             start_index=_first(start_index, 1),
             end_index=_first(end_index, 0),
@@ -294,6 +319,7 @@ class BatchPromptBuilder:
             auto_advance=_first(auto_advance, True),
             width=_first(width, ""),
             height=_first(height, ""),
+            vary_wildcards=_first(vary_wildcards, False),
         )
         for warning in result.warnings:
             log.warning("[Batch Prompt Builder] %s", warning)
