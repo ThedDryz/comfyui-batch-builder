@@ -9,18 +9,21 @@ function pretty(name) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** Labels only items still showing their raw name, so user renames are kept. */
-function setLabel(item) {
-  if (!item?.name || (item.label && item.label !== item.name)) return;
+/**
+ * Labels items showing their raw name or a label this script made for another item
+ * (left behind when a saved slot moved); any other label is a user rename and is kept.
+ */
+function setLabel(item, generated) {
+  if (!item?.name) return;
+  if (item.label && item.label !== item.name && !generated.has(item.label)) return;
   item.label = pretty(item.name);
 }
 
 function applyLabels(node) {
-  for (const widget of node.widgets ?? []) {
-    if (widget.hidden || SELF_LABELED.has(widget.type)) continue;
-    setLabel(widget);
-  }
-  for (const slot of [...(node.inputs ?? []), ...(node.outputs ?? [])]) setLabel(slot);
+  const widgets = (node.widgets ?? []).filter((w) => !w.hidden && !SELF_LABELED.has(w.type));
+  const slots = [...(node.inputs ?? []), ...(node.outputs ?? [])];
+  const generated = new Set([...widgets, ...slots].filter((i) => i?.name).map((i) => pretty(i.name)));
+  for (const item of [...widgets, ...slots]) setLabel(item, generated);
   node.setDirtyCanvas?.(true, true);
 }
 

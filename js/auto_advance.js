@@ -59,6 +59,46 @@ function migrateWidgetValues(info) {
   values.splice(VARY_SLOT, 0, vary);
 }
 
+function getLink(graph, id) {
+  const links = graph?.links;
+  return links?.get?.(id) ?? links?.[id];
+}
+
+/**
+ * Output slots are saved by position, so a graph saved before an output was added or
+ * moved puts old names, labels and links on the wrong slots. Rebuild them in the
+ * node definition's order, matching saved slots by name and moving their links along.
+ */
+function migrateOutputs(node, info, nodeData) {
+  const saved = info?.outputs;
+  const names = nodeData.output_name ?? nodeData.output;
+  const types = nodeData.output;
+  if (!Array.isArray(saved) || !Array.isArray(names)) return;
+  if (saved.length === names.length && saved.every((s, i) => s?.name === names[i] && s?.type === types[i])) return;
+
+  const generated = new Set(names.map((n) => String(n).replace(/_/g, " ").toLowerCase()));
+  const unused = new Set(saved.filter(Boolean));
+  info.outputs = names.map((name, index) => {
+    const candidates = [...unused].filter((s) => s.name === name);
+    const pick =
+      candidates.find((s) => s.links?.length && s.type === types[index]) ??
+      candidates.find((s) => s.links?.length) ??
+      candidates.find((s) => s.type === types[index]) ??
+      candidates[0];
+    if (!pick) return { name, type: types[index], links: null };
+    unused.delete(pick);
+    for (const id of pick.links ?? []) {
+      const link = getLink(node.graph, id);
+      if (!link) continue;
+      link.origin_slot = index;
+      link.type = types[index];
+    }
+    const { label, ...slot } = pick;
+    const keep = label && !generated.has(String(label).toLowerCase());
+    return { ...slot, ...(keep ? { label } : {}), name, type: types[index] };
+  });
+}
+
 function onStopped({ detail }) {
   if (detail?.prompt_id) pending.delete(detail.prompt_id);
   else pending.clear();
@@ -78,6 +118,7 @@ app.registerExtension({
     const configure = nodeType.prototype.configure;
     nodeType.prototype.configure = function (info) {
       migrateWidgetValues(info);
+      migrateOutputs(this, info, nodeData);
       return configure.apply(this, arguments);
     };
   },
