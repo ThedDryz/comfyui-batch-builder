@@ -212,6 +212,13 @@ class SizeTest(unittest.TestCase):
         optional = BatchPromptBuilder.INPUT_TYPES()["optional"]
         self.assertEqual(optional["width"][1]["group"], optional["height"][1]["group"])
 
+    def test_vary_wildcards_sits_between_batch_and_auto_advance(self):
+        spec = BatchPromptBuilder.INPUT_TYPES()
+        self.assertEqual(list(spec["required"])[:6],
+                         ["seeds", "start_index", "end_index", "batch", "vary_wildcards", "auto_advance"])
+        self.assertFalse(spec["required"]["vary_wildcards"][1]["default"])
+        self.assertNotIn("vary_wildcards", spec["optional"])
+
 
 class PlaceholderTest(unittest.TestCase):
     def test_placeholders_name_the_type(self):

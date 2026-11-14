@@ -45,6 +45,20 @@ function onSuccess({ detail }) {
   app.queuePrompt(0, 1);
 }
 
+const VARY_SLOT = 3; // start_index, end_index, batch, vary_wildcards, auto_advance, prepend, ...
+
+/**
+ * Older graphs saved auto_advance at VARY_SLOT and either had no vary_wildcards
+ * or had it last; widget values are positional, so shift them into the new layout.
+ */
+function migrateWidgetValues(info) {
+  const values = info?.widgets_values;
+  if (!Array.isArray(values) || values.length <= VARY_SLOT + 1) return;
+  if (typeof values[VARY_SLOT + 1] === "boolean") return;
+  const vary = values.length > 11 && typeof values.at(-1) === "boolean" ? values.pop() : false;
+  values.splice(VARY_SLOT, 0, vary);
+}
+
 function onStopped({ detail }) {
   if (detail?.prompt_id) pending.delete(detail.prompt_id);
   else pending.clear();
@@ -57,5 +71,14 @@ app.registerExtension({
     api.addEventListener("execution_success", onSuccess);
     api.addEventListener("execution_error", onStopped);
     api.addEventListener("execution_interrupted", onStopped);
+  },
+
+  async beforeRegisterNodeDef(nodeType, nodeData) {
+    if (nodeData.name !== NODE_CLASS) return;
+    const configure = nodeType.prototype.configure;
+    nodeType.prototype.configure = function (info) {
+      migrateWidgetValues(info);
+      return configure.apply(this, arguments);
+    };
   },
 });

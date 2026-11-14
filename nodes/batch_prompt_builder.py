@@ -261,6 +261,14 @@ class BatchPromptBuilder:
                     "INT",
                     {"default": 4, "min": 1, "max": 1024, "tooltip": "Images per line (uses the first N seeds)."},
                 ),
+                "vary_wildcards": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Roll new wildcards each time a seed repeats in the batch. "
+                        "KSampler still gets the repeated seed.",
+                    },
+                ),
                 "auto_advance": (
                     "BOOLEAN",
                     {"default": True, "tooltip": "Queue the next line automatically after a successful run."},
@@ -291,14 +299,6 @@ class BatchPromptBuilder:
                     f"Latent height per prompt line, in pixels. Empty = {DEFAULT_SIZE}.",
                     group="latent_size",
                     group_title="Latent size",
-                ),
-                "vary_wildcards": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                        "tooltip": "Roll new wildcards each time a seed repeats in the batch. "
-                        "KSampler still gets the repeated seed.",
-                    },
                 ),
             },
         }
