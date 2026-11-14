@@ -62,7 +62,7 @@ The grey placeholder names the data type: `text` is one block of text, `multilin
 | --- | --- |
 | `start_index` | Line to generate, 1-based. Advances automatically. |
 | `end_index` | Last line to generate, inclusive. `0` means the last line of the lists. |
-| `batch` | Images per line (uses the first `batch` seeds). |
+| `batch` | Images per line. Uses the first `batch` seeds; if there are fewer seeds than `batch`, they repeat in order (4 seeds, batch 6: 1 2 3 4 1 2). |
 | `auto_advance` | Queue the next line after a successful run. |
 | `prepend` / `append` | Fixed text around every prompt (style, artist, quality tags). |
 | `booru` | One booru tag line per prompt. |

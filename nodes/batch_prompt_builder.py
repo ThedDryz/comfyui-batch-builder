@@ -191,8 +191,8 @@ def build_batch(
     if not seeds:
         raise ValueError("Batch Prompt Builder needs at least one seed; connect a Seed List.")
     if len(seeds) < batch:
-        warnings.append(f"batch is {batch} but only {len(seeds)} seed(s) are connected; using {len(seeds)}")
-    result.seeds = seeds[:batch]
+        warnings.append(f"batch is {batch} but only {len(seeds)} seed(s) are connected; seeds are cycled")
+    result.seeds = [seeds[i % len(seeds)] for i in range(batch)]
     result.prompts = [template.resolve(s).strip() for s in result.seeds]
 
     if auto_advance and line < last_line:

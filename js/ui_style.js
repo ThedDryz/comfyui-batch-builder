@@ -6,8 +6,6 @@ const CSS = `
   flex-direction: column;
   gap: 2px;
   box-sizing: border-box;
-  height: 100%;
-  overflow: hidden;
   font: 11px/1.3 var(--comfy-font, sans-serif);
   color: var(--input-text, #ddd);
 }
@@ -42,8 +40,10 @@ const CSS = `
 .bpr-field.open .bpr-peek { visibility: hidden; }
 .bpr-field.off .bpr-label,
 .bpr-field.off .bpr-peek { opacity: 0.35; text-decoration: line-through; }
+.bpr-body { display: none; flex: 0 0 auto; }
+.bpr-field.open .bpr-body { display: block; }
 .bpr-text {
-  display: none;
+  display: block;
   box-sizing: border-box;
   width: 100%;
   min-height: 26px;
@@ -58,14 +58,12 @@ const CSS = `
   font: 12px/16px var(--comfy-font, sans-serif);
 }
 .bpr-text:focus { border-color: var(--p-primary-color, #6a9fd8); }
-.bpr-field.open .bpr-text { display: block; }
 .bpr-field.off .bpr-text { opacity: 0.45; }
 
-.bpr-row { display: none; gap: 6px; }
-.bpr-field.open .bpr-row { display: flex; }
+.bpr-row { display: flex; gap: 6px; }
 .bpr-cell { display: flex; flex: 1 1 0; min-width: 0; align-items: flex-start; gap: 4px; }
 .bpr-cell-label { flex: 0 0 auto; padding-top: 5px; font-weight: 600; opacity: 0.7; }
-.bpr-row .bpr-text { display: block; flex: 1 1 auto; width: auto; min-width: 0; }
+.bpr-row .bpr-text { flex: 1 1 auto; width: auto; min-width: 0; }
 
 .bpr-switch { position: relative; flex: 0 0 24px; height: 13px; cursor: pointer; }
 .bpr-switch input { position: absolute; opacity: 0; width: 0; height: 0; }

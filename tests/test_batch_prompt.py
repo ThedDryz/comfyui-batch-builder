@@ -117,11 +117,13 @@ class SeedTest(unittest.TestCase):
         r = build_batch(1, 0, 2, natural="{red|blue|green} hair", seeds=SEEDS)
         self.assertEqual(r.seeds, [11, 22])
         self.assertEqual(r.prompts, [wildcard.resolve("{red|blue|green} hair", s) for s in (11, 22)])
+        self.assertEqual(r.warnings, [])
 
-    def test_short_seed_list_warns(self):
-        r = build_batch(1, 0, 8, booru="a", seeds=SEEDS)
-        self.assertEqual(r.seeds, SEEDS)
-        self.assertTrue(any("only 4 seed" in w for w in r.warnings))
+    def test_short_seed_list_cycles(self):
+        r = build_batch(1, 0, 6, natural="{red|blue|green} hair", seeds=SEEDS)
+        self.assertEqual(r.seeds, [11, 22, 33, 44, 11, 22])
+        self.assertEqual(r.prompts[4], r.prompts[0])
+        self.assertTrue(any("only 4 seed(s) are connected; seeds are cycled" in w for w in r.warnings))
 
     def test_no_seeds_raises(self):
         with self.assertRaises(ValueError):

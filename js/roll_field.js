@@ -55,7 +55,11 @@ class RollField {
     this.text.placeholder = options.placeholder ?? "";
     this.text.spellcheck = false;
     this.text.value = options.default ?? "";
-    this.root.append(this.head, this.text);
+    // The textarea must not be a flex item of the fixed-height field, or flex-shrink
+    // squeezes it back whenever a resize drag tries to grow it.
+    this.body = el("div", "bpr-body");
+    this.body.append(this.text);
+    this.root.append(this.head, this.body);
 
     this.head.addEventListener("click", () => this.setOpen(!this.open, true));
     this.text.addEventListener("input", () => {
@@ -116,7 +120,7 @@ class RollField {
       member.widget.hidden = true;
       member.widget.computeSize = () => [0, -4];
     }
-    this.root.append(row);
+    this.body.replaceChildren(row);
     this.sync();
   }
 
