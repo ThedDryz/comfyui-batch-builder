@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import wildcard
+from .prompt_format import clean_prompt, format_sentences, format_tags
 from .character_definition import (
     DROP_KEYWORDS,
     MULTILINE_INT,
@@ -23,6 +24,9 @@ CATEGORY = "prompt/batch"
 MAX_INDEX = 100000
 DEFAULT_SIZE = 1024
 MIN_SIZE = 64
+TAG_FIRST = "tag first"
+LANGUAGE_FIRST = "language first"
+PROMPT_ORDERS = (TAG_FIRST, LANGUAGE_FIRST)
 # Odd, so every nonzero occurrence gives a nonzero mask and a roll different from the seed.
 _VARIANT_STEP = 0x9E3779B97F4A7C15
 
@@ -129,6 +133,7 @@ def build_batch(
     width="",
     height="",
     vary_wildcards=False,
+    prompt_order=LANGUAGE_FIRST,
 ):
     booru_lines = split_lines(booru)
     natural_lines = split_lines(natural)
@@ -191,8 +196,11 @@ def build_batch(
             warnings.append("character input is not from Character Definition; it is used as-is")
         appearance = plain.strip()
 
-    segments = (prepend, booru_line, natural_line, appearance, append)
-    result.template = " ".join(s.strip() for s in segments if s and s.strip())
+    # Character and booru are one tag group; prepend and append always frame the prompt.
+    tags = format_tags(appearance) + format_tags(booru_line)
+    language = format_sentences(natural_line)
+    body = tags + language if prompt_order == TAG_FIRST else language + tags
+    result.template = (format_tags(prepend) + body + format_tags(append)).rstrip()
 
     template = wildcard.parse(result.template)
     warnings.extend(template.errors)
@@ -210,7 +218,7 @@ def build_batch(
         for s in result.seeds:
             roll_seeds.append(_roll_seed(s, seen.get(s, 0)))
             seen[s] = seen.get(s, 0) + 1
-    result.prompts = [template.resolve(s).strip() for s in roll_seeds]
+    result.prompts = [clean_prompt(template.resolve(s)) for s in roll_seeds]
 
     if auto_advance and line < last_line:
         result.advance = True
@@ -233,7 +241,8 @@ class BatchPromptBuilder:
     OUTPUT_NODE = True
     FUNCTION = "build"
     DESCRIPTION = (
-        "Builds the prompt for line `start_index` (prepend, booru, natural, character, append), "
+        "Builds the prompt for line `start_index` (prepend, natural language and tags in the chosen "
+        "order, append), "
         "resolves {a|b} wildcards once per seed, then advances to the next line and queues again "
         "until `end_index`. Queue with batch count 1."
     )
@@ -260,6 +269,14 @@ class BatchPromptBuilder:
                 "batch": (
                     "INT",
                     {"default": 4, "min": 1, "max": 1024, "tooltip": "Images per line (uses the first N seeds)."},
+                ),
+                "prompt_order": (
+                    list(PROMPT_ORDERS),
+                    {
+                        "default": LANGUAGE_FIRST,
+                        "tooltip": "Prepend stays first and Append last. Tag first: character, booru, then "
+                        "natural language. Language first: natural language, then character and booru.",
+                    },
                 ),
                 "vary_wildcards": (
                     "BOOLEAN",
@@ -304,7 +321,8 @@ class BatchPromptBuilder:
         }
 
     def build(self, seeds, start_index, end_index, batch, auto_advance, prepend, append, booru, natural,
-              character_booleans, character=None, width=None, height=None, vary_wildcards=None):
+              character_booleans, character=None, width=None, height=None, vary_wildcards=None,
+              prompt_order=None):
         result = build_batch(
             start_index=_first(start_index, 1),
             end_index=_first(end_index, 0),
@@ -320,6 +338,7 @@ class BatchPromptBuilder:
             width=_first(width, ""),
             height=_first(height, ""),
             vary_wildcards=_first(vary_wildcards, False),
+            prompt_order=_first(prompt_order, LANGUAGE_FIRST),
         )
         for warning in result.warnings:
             log.warning("[Batch Prompt Builder] %s", warning)

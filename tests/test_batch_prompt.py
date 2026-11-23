@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from nodes import wildcard
 from nodes.batch_prompt_builder import BatchPromptBuilder, _roll_seed, build_batch
 from nodes.character_definition import CharacterDefinition
+from nodes.prompt_format import clean_prompt, format_sentences, format_tags
 from nodes.seed_list import SeedList, make_seeds
 
 SEEDS = [11, 22, 33, 44]
@@ -45,8 +46,8 @@ class LineTest(unittest.TestCase):
     def test_zips_lines_in_order(self):
         r = build_batch(2, 0, 1, prepend="style,", append="quality", booru="b1\nb2\nb3",
                         natural="n1\nn2\nn3", character=character(), seeds=SEEDS)
-        self.assertTrue(r.template.startswith("style, b2 n2 1girl, gyaru, black hair"))
-        self.assertTrue(r.template.endswith("sneakers quality"))
+        self.assertTrue(r.template.startswith("style, n2. 1girl, gyaru, black hair"))
+        self.assertTrue(r.template.endswith("sneakers, b2, quality,"))
         self.assertEqual(r.warnings, [])
 
     def test_trailing_newline_is_not_a_line(self):
@@ -55,13 +56,13 @@ class LineTest(unittest.TestCase):
 
     def test_blank_lines_keep_numbering(self):
         r = build_batch(3, 0, 1, booru="b1\n\nb3", natural="n1\nn2\nn3", seeds=SEEDS)
-        self.assertEqual(r.template, "b3 n3")
+        self.assertEqual(r.template, "n3. b3,")
         r = build_batch(2, 0, 1, booru="b1\n\nb3", natural="n1\nn2\nn3", seeds=SEEDS)
-        self.assertEqual(r.template, "n2")
+        self.assertEqual(r.template, "n2.")
 
     def test_length_mismatch_warns_and_pads(self):
         r = build_batch(3, 0, 1, booru="b1\nb2\nb3", natural="n1", seeds=SEEDS)
-        self.assertEqual(r.template, "b3")
+        self.assertEqual(r.template, "b3,")
         self.assertEqual(r.last_line, 3)
         self.assertIn("padded", r.warnings[0])
 
@@ -71,8 +72,64 @@ class LineTest(unittest.TestCase):
 
     def test_empty_lists_make_one_line(self):
         r = build_batch(1, 0, 2, prepend="style", seeds=SEEDS)
-        self.assertEqual(r.prompts, ["style", "style"])
+        self.assertEqual(r.prompts, ["style,", "style,"])
         self.assertFalse(r.advance)
+
+
+class PromptOrderTest(unittest.TestCase):
+    ARGS = dict(prepend="masterpiece", append="artist", booru="outdoors", natural="she stands in the rain",
+                character="1girl, miku", seeds=SEEDS)
+
+    def test_language_first_is_default(self):
+        r = build_batch(1, 0, 1, **self.ARGS)
+        self.assertEqual(r.template, "masterpiece, she stands in the rain. 1girl, miku, outdoors, artist,")
+
+    def test_tag_first(self):
+        r = build_batch(1, 0, 1, prompt_order="tag first", **self.ARGS)
+        self.assertEqual(r.template, "masterpiece, 1girl, miku, outdoors, she stands in the rain. artist,")
+
+    def test_node_passes_order(self):
+        with mock.patch("nodes.batch_prompt_builder.empty_latent", return_value=None):
+            out = BatchPromptBuilder().build(
+                seeds=SEEDS, start_index=[1], end_index=[0], batch=[1], auto_advance=[False],
+                prepend=[""], append=[""], booru=["a"], natural=["n"], character_booleans=[""],
+                prompt_order=["tag first"],
+            )
+        self.assertEqual(out["result"][2], "a, n.")
+
+
+class PromptFormatTest(unittest.TestCase):
+    def test_tags_get_comma_space(self):
+        self.assertEqual(format_tags("  masterpiece ,best   quality,, \n score_9 "),
+                         "masterpiece, best quality, score_9, ")
+        self.assertEqual(format_tags(" , "), "")
+
+    def test_wildcard_with_comma_stays_one_tag(self):
+        self.assertEqual(format_tags("{red hair , long|blonde}  ,  smile"), "{red hair, long|blonde}, smile, ")
+
+    def test_sentences_get_period_space(self):
+        self.assertEqual(format_sentences("she  stands in the rain .she smiles  ,"),
+                         "she stands in the rain. she smiles. ")
+        self.assertEqual(format_sentences("Wow!"), "Wow! ")
+        self.assertEqual(format_sentences("   "), "")
+
+    def test_sentences_keep_decimals_weights_and_ellipses(self):
+        self.assertEqual(format_sentences("A cat.Weight (x:1.2) and 3.5 cups... wow"),
+                         "A cat. Weight (x:1.2) and 3.5 cups... wow. ")
+
+    def test_resolved_prompt_is_cleaned(self):
+        self.assertEqual(clean_prompt("a, , b ,  c"), "a, b, c")
+        self.assertEqual(clean_prompt("she runs.. b,"), "she runs. b,")
+        self.assertEqual(clean_prompt("she runs., b,"), "she runs. b,")
+        self.assertEqual(clean_prompt("a, !?, b,"), "a, !?, b,")
+
+    def test_empty_wildcard_option_leaves_no_gap(self):
+        r = build_batch(1, 0, 4, booru="{a|}, b", natural="she {runs.|walks}", seeds=SEEDS)
+        for prompt in r.prompts:
+            self.assertNotIn("  ", prompt)
+            self.assertNotIn(", ,", prompt)
+            self.assertNotIn(".,", prompt)
+            self.assertNotIn("..", prompt)
 
 
 class KeywordTest(unittest.TestCase):
@@ -80,7 +137,7 @@ class KeywordTest(unittest.TestCase):
         r = build_batch(1, 0, 1, booru="portrait", character_booleans="nohead, noeyes, nobottom, nolegs, nofeet",
                         character=character(), seeds=SEEDS)
         self.assertEqual(r.dropped, ["Head", "Eyes", "Bottom", "Legs", "Feet"])
-        self.assertEqual(r.template, "portrait 1girl, gyaru, black hair, mole, flat chest, hoodie")
+        self.assertEqual(r.template, "1girl, gyaru, black hair, mole, flat chest, hoodie, portrait,")
 
     def test_switch_off_stays_off(self):
         r = build_batch(1, 0, 1, character_booleans="nohead", character=character(top_enabled=False),
@@ -109,14 +166,15 @@ class KeywordTest(unittest.TestCase):
 
     def test_plain_character_string_is_used_as_is(self):
         r = build_batch(1, 0, 1, booru="a", character="1boy", seeds=SEEDS)
-        self.assertEqual(r.template, "a 1boy")
+        self.assertEqual(r.template, "1boy, a,")
 
 
 class SeedTest(unittest.TestCase):
     def test_uses_first_batch_seeds(self):
         r = build_batch(1, 0, 2, natural="{red|blue|green} hair", seeds=SEEDS)
         self.assertEqual(r.seeds, [11, 22])
-        self.assertEqual(r.prompts, [wildcard.resolve("{red|blue|green} hair", s) for s in (11, 22)])
+        self.assertEqual(r.template, "{red|blue|green} hair.")
+        self.assertEqual(r.prompts, [clean_prompt(wildcard.resolve(r.template, s)) for s in (11, 22)])
         self.assertEqual(r.warnings, [])
 
     def test_short_seed_list_cycles(self):
@@ -129,8 +187,8 @@ class SeedTest(unittest.TestCase):
         text = "{a|b|c|d|e|f|g|h} {i|j|k|l|m|n|o|p}"
         r = build_batch(1, 0, 4, natural=text, seeds=[7], vary_wildcards=True)
         self.assertEqual(r.seeds, [7, 7, 7, 7])
-        self.assertEqual(r.prompts, [wildcard.resolve(text, _roll_seed(7, n)) for n in range(4)])
-        self.assertEqual(r.prompts[0], wildcard.resolve(text, 7))
+        self.assertEqual(r.prompts, [clean_prompt(wildcard.resolve(r.template, _roll_seed(7, n))) for n in range(4)])
+        self.assertEqual(r.prompts[0], clean_prompt(wildcard.resolve(r.template, 7)))
         self.assertGreater(len(set(r.prompts)), 1)
         again = build_batch(1, 0, 4, natural=text, seeds=[7], vary_wildcards=True)
         self.assertEqual(again.prompts, r.prompts)
@@ -217,10 +275,13 @@ class SizeTest(unittest.TestCase):
         optional = BatchPromptBuilder.INPUT_TYPES()["optional"]
         self.assertEqual(optional["width"][1]["group"], optional["height"][1]["group"])
 
-    def test_vary_wildcards_sits_between_batch_and_auto_advance(self):
+    def test_controls_follow_batch_in_order(self):
         spec = BatchPromptBuilder.INPUT_TYPES()
-        self.assertEqual(list(spec["required"])[:6],
-                         ["seeds", "start_index", "end_index", "batch", "vary_wildcards", "auto_advance"])
+        self.assertEqual(list(spec["required"])[:7],
+                         ["seeds", "start_index", "end_index", "batch", "prompt_order", "vary_wildcards", "auto_advance"])
+        order = spec["required"]["prompt_order"]
+        self.assertEqual(order[0], ["tag first", "language first"])
+        self.assertEqual(order[1]["default"], "language first")
         self.assertFalse(spec["required"]["vary_wildcards"][1]["default"])
         self.assertNotIn("vary_wildcards", spec["optional"])
 
@@ -336,7 +397,8 @@ class NodeWrapperTest(unittest.TestCase):
         self.assertEqual(count, 3)
         self.assertEqual(len(prompts), 3)
         self.assertEqual(seeds, SEEDS[:3])
-        self.assertTrue(template.startswith("s a 1girl"))
+        self.assertTrue(template.startswith("s, 1girl"))
+        self.assertTrue(template.endswith(", a,"))
         self.assertEqual(out["ui"]["bp_advance"], [True])
         self.assertEqual(out["ui"]["bp_next_index"], [2])
         self.assertIn("line 1 of 2", status)

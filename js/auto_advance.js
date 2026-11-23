@@ -45,18 +45,27 @@ function onSuccess({ detail }) {
   app.queuePrompt(0, 1);
 }
 
-const VARY_SLOT = 3; // start_index, end_index, batch, vary_wildcards, auto_advance, prepend, ...
+// Current layout: start_index, end_index, batch, prompt_order, vary_wildcards, auto_advance, prepend, ...
+const ORDER_SLOT = 3;
+const PROMPT_ORDERS = new Set(["tag first", "language first"]);
+const DEFAULT_ORDER = "language first";
+// Layout before prompt_order existed, where vary_wildcards sat right after batch.
+const VARY_SLOT = 3;
 
 /**
- * Older graphs saved auto_advance at VARY_SLOT and either had no vary_wildcards
- * or had it last; widget values are positional, so shift them into the new layout.
+ * Widget values are positional, so graphs saved with an older widget layout are
+ * shifted into the current one: first vary_wildcards (absent, or saved last),
+ * then prompt_order (absent before the dropdown was added).
  */
 function migrateWidgetValues(info) {
   const values = info?.widgets_values;
   if (!Array.isArray(values) || values.length <= VARY_SLOT + 1) return;
-  if (typeof values[VARY_SLOT + 1] === "boolean") return;
-  const vary = values.length > 11 && typeof values.at(-1) === "boolean" ? values.pop() : false;
-  values.splice(VARY_SLOT, 0, vary);
+  if (PROMPT_ORDERS.has(values[ORDER_SLOT])) return;
+  if (typeof values[VARY_SLOT + 1] !== "boolean") {
+    const vary = values.length > 11 && typeof values.at(-1) === "boolean" ? values.pop() : false;
+    values.splice(VARY_SLOT, 0, vary);
+  }
+  values.splice(ORDER_SLOT, 0, DEFAULT_ORDER);
 }
 
 function getLink(graph, id) {

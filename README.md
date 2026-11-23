@@ -63,6 +63,7 @@ The grey placeholder names the data type: `text` is one block of text, `multilin
 | **Start index** | Line to generate, 1-based. Advances automatically. |
 | **End index** | Last line to generate, inclusive. `0` means the last line of the lists. |
 | **Batch** | Images per line. Uses the first **Batch** seeds; if there are fewer seeds than **Batch**, they repeat in order (4 seeds, batch 6: 1 2 3 4 1 2). |
+| **Prompt order** | `language first` (default) or `tag first`. See Prompt order below. |
 | **Vary wildcards** | Off by default. When on, a seed that repeats in the batch gets a new wildcard roll each time (see Wildcards). |
 | **Auto advance** | Queue the next line after a successful run. |
 | **Prepend** / **Append** | Fixed text around every prompt (style, artist, quality tags). |
@@ -71,7 +72,21 @@ The grey placeholder names the data type: `text` is one block of text, `multilin
 | **Character keywords** | One keyword line per prompt, for example `nohead, noeyes, nobottom`. |
 | **Latent size** `W` / `H` | One width and one height per prompt line, side by side under one header. |
 
-Each prompt is **Prepend**, the booru line, the natural line, the character, and **Append**, joined with spaces.
+**Prompt order.** **Prepend** is always first and **Append** always last. The character and the booru line are one tag group, character first.
+
+- `language first`: Prepend, natural language, character, booru line, Append.
+- `tag first`: Prepend, character, booru line, natural language, Append.
+
+```text
+language first: masterpiece, she stands in the rain. 1girl, miku, outdoors, artist,
+tag first:      masterpiece, 1girl, miku, outdoors, she stands in the rain. artist,
+```
+
+**Punctuation and spaces.** Every block is cleaned before it is joined, so you don't need to type separators:
+
+- Tag fields (Prepend, Append, booru lines, character parts) become `tag, tag, `: one comma and one space between tags, extra spaces and empty tags removed. A line break in Prepend or Append counts as a comma. Commas inside a `{...}` wildcard do not split it.
+- Natural language becomes `Sentence. Sentence. `: spaces collapsed, one space after each `.`, `!` or `?`, and a period added at the end when missing. Decimals, weights like `(word:1.2)` and `...` are left alone.
+- After wildcards are picked, gaps left by an empty option (`, ,`, doubled spaces or periods) are removed.
 
 **Lines.** Booru and natural are read line by line together. Blank lines count, so line numbers stay stable. If both lists have content and their lengths differ, the shorter one is padded with empty lines and a warning is shown.
 
